@@ -3,29 +3,40 @@ import time
 import os
 import subprocess
 import glob
+import shutil
+import argparse
 
 # 3rd party
-from PIL import ImageGrab
-import pyautogui
 import pywinauto
 from skimage.measure import compare_ssim
+from PIL import ImageGrab
+import pyautogui
 import numpy
 import cv2
 
 # variable for number of times the script will
 # run through multi-promo rotation
-mp = 1
+mp = 30
 
 # directory with timestamp in name to save image files to,
 # and a subdirectory to house duplicate images in
-timestamp = (time.strftime("%m-%d-%y -- %I-%M-%S %p", time.localtime()))
-wk_dir = (f'C:/Users/NAME/Desktop/PS4ConsoleScraper/PS4ConsoleScraper'
-          f' {timestamp}')
-ref_dir = 'C:/Users/NAME/Desktop/PS4ConsoleScraper/PS4ReferenceDirectory'
+timestamp_folder = (time.strftime('%m-%d-%y'))
+wk_dir = f'path/to/directory/PS4ConsoleScraper {timestamp_folder}'
+ref_dir = 'path/to/directory/PS4ConsoleScraper/PS4ReferenceDirectory'
 fpath_images = wk_dir + '/*.jpg'
+fpath_ref_images = ref_dir + '/*.jpg'
 fpath_dupes = wk_dir + '/dupes'
 fpath_no_changes = wk_dir + '/no_changes'
 image_dict = {}
+dynamic_locations = ['ADDONS', 'FEATURE NAMED', 'FEATURED', 'FREE',
+                     'GAMES big', 'GAMES eg',
+                     'GAMES ft', 'PSPLUS', 'PSVR', 'STORE', 'WHATS HOT big',
+                     'WHATS HOT one', 'WHATS NEW']
+static_locations = ['WHATS HOT ng', 'WHATS HOT po', 'WHATS HOT nao',
+                    'WHATS HOT gd', 'WHATS HOT nvr', 'DEALS one', 'DEALS gd',
+                    'DEALS ppd', 'POPULAR one', 'POPULAR ts', 'POPULAR mpg',
+                    'POPULAR tao', 'GAMES mp', 'GAMES oop', 'GAMES dg',
+                    'GAMES npp', 'GAMES vrg', 'GAMES bs', 'GAMES npn']
 
 
 # pyautogui's press function wasn't reliable
@@ -53,7 +64,7 @@ def slow_press(key):
 
 # navigates to top of nav-bar
 # then moves down n times to next location
-def nav_top(n):
+def nav_top(n, location):
     print('Navigating to top of menu')
     for i in range(10):
         fast_press('up')
@@ -66,7 +77,7 @@ def nav_top(n):
 
 # navigates to bottom of nav-bar
 # then moves up n times to next location
-def nav_bottom(n):
+def nav_bottom(n, location):
     print('Navigating to bottom of menu')
     pyautogui.keyDown('down')
     time.sleep(7)
@@ -95,12 +106,11 @@ def set_fg():
     time.sleep(2)
 
 
-# recalibrates every 10 passes, in case the scraper taking screenshots of the
-# improper spot. backs out to main screen and navigates back to the right
-# location
-def recalibrate():
-    print('Recalibrating to ensure scraper is in the right place, please stand'
-          'by...')
+# recalibrates every 10 passes, in case the scraper taking screenshots
+# of the improper spot. backs out to main screen and navigates back to the
+# right location
+def recalibrate(location):
+    print('Recalibrating, please stand by...')
     for i in range(5):
         press('esc')
     for i in range(10):
@@ -119,7 +129,7 @@ def recalibrate():
     else:
         press('enter')
         time.sleep(5)
-        nav_bottom(n)
+        nav_bottom(n, location)
 
 
 # takes a location as an argument, removes all duplicate images
@@ -159,8 +169,8 @@ def dupe_remover(location):
             print(f'{image_name} to {other_image_name} SSIM: {ssim}')
             if ssim > .97:
                 print('Moving dupe')
-                os.rename(f'{wk_dir}/{other_image_name}', f'{fpath_dupes}/'
-                          f'{other_image_name}')
+                os.rename(f'{wk_dir}/{other_image_name}',
+                          f'{fpath_dupes}/{other_image_name}')
                 duplicate_to_this_image.append(other_image_name)
 
         for dupe_name in duplicate_to_this_image:
@@ -174,384 +184,473 @@ def dupe_remover(location):
         del image_dict[image_name]
 
 
-print('Making directories')
-os.makedirs(wk_dir, exist_ok=True)
-os.makedirs(ref_dir, exist_ok=True)
-os.makedirs(fpath_dupes, exist_ok=True)
-os.makedirs(fpath_no_changes, exist_ok=True)
+def new_image_check(location):
+    ''' checks each captured location against a reference image directory.
+    loads images and compares SSIM using cv2.
+    if the images are the same, the just-captured image is moved to
+    "no changes" directory. if the images are different, the just-captured
+    image is copied and replaces the image in the ref directory.
+    '''
 
-# Opens the ps4 remote play program
-print('Opening controller emulator, one moment please...')
-subprocess.Popen('C:/Users/NAME/Desktop/PS4ConsoleScraper/RemotePlay/'
-                 'RemotePlay.exe')
-time.sleep(15)
-set_fg()
-press('tab')
-press('enter')
-print('Waiting 90 seconds for PS4 to turn on...')
-time.sleep(20)
-# print('60 more seconds...')
-# time.sleep(30)
-# print('30 more seconds...')
-# time.sleep(30)
-set_fg()
-pyautogui.hotkey('alt', 'enter')
+    image_list = []
+    print(f'Checking {location} location.')
+    for img in glob.glob(fpath_images):
+        imname = os.path.basename(img)
+        if location in imname:
+            image = cv2.imread(img, 0)
+            image_name = os.path.basename(img)
+            image_list.append(image)
+            print(f'Image: {image_name}')
+        else:
+            pass
 
-# WHAT'S NEW
-location = 'WHATS NEW'
-print(f'Navigating to {location} location')
-# goes through each promotion in the location
-# and takes a screenshot
-# put in a couple redundant moves to be safe
-# this location can have varying promo numbers
-for i in range(10):
-    fast_press('down')
-    ss(location)
+    for ref_img in glob.glob(fpath_ref_images):
+        ref_imname = os.path.basename(ref_img)
+        if location in ref_imname:
+            ref_image = cv2.imread(ref_img, 0)
+            ref_image_name = os.path.basename(ref_img)
+            image_list.append(ref_image)
+            print(f'Ref image: {ref_image_name}')
+        else:
+            pass
 
-# STORE
-location = 'STORE'
-recal = 1
-print(f'Navigating to {location} location')
-press('esc')
-time.sleep(1)
-press('left')
-# toggles back and forth variable number of times to grab all promos
-for i in range(mp):
-    print(f'Pass {i+1} of {mp}')
-    time.sleep(2)
-    for i in range(3):
-        fast_press('down')
-    ss(location)
-    press('esc')
-    press('right')
-    time.sleep(1)
-    press('left')
-    recal += 1
-    if recal > 10:
-        recal = 1
-        recalibrate()
+    # resizes images if they are not the same resolution,
+    # since SSIM needs same-sized images to compare
+    if image.size != ref_image.size:
+        print('Resizing images...')
+        image = cv2.resize(image, (1920, 1080))
+        ref_image = cv2.resize(ref_image, (1920, 1080))
     else:
         pass
 
-# FEATURED / WHATS HOT 1 / WHATS HOT BIG
-recal = 1
-location = 'FEATURED'
-print(f'Navigating to {location} location')
-press('enter')
-time.sleep(8)
-print(f'Executing multi-promo placement rotation')
-# toggles back and forth variable number of times to grab all promos
-for i in range(mp):
-    print(f'Pass {i+1} of {mp}')
-    fast_press('right')
-    fast_press('up')
-    ss(location)
-    fast_press('down')
-    press('left')
-    location = 'WHATS HOT'
+    # makes sure there are 2 images to compare. if not, skips.
+    if len(image_list) > 1:
+
+        # compares the 2 images
+        ssim = compare_ssim(image, ref_image)
+        print(f'SSIM: {ssim}')
+        if ssim > .95:
+            print('New image is the same as reference image. No changes.')
+            os.rename(f'{wk_dir}/{image_name}',
+                      f'{fpath_no_changes}/{image_name}')
+        else:
+            print('New image is different. Updating image in reference'
+                  'directory and moving old image to "archive" directory.')
+            try:
+                os.rename(f'{ref_dir}/{ref_image_name}',
+                          f'{ref_dir}/archive/{ref_image_name}')
+
+            # overwrites the file if a same-name file already exists
+            except OSError:
+                os.replace(f'{ref_dir}/{ref_image_name}',
+                           f'{ref_dir}/archive/{ref_image_name}')
+            shutil.copy(f'{wk_dir}/{image_name}', f'{ref_dir}/{image_name}')
+    else:
+        print("Something went wrong, there aren't two images to comapre."
+              "Moving to next location.")
+
+
+def setup():
+    os.makedirs(wk_dir, exist_ok=True)
+    os.makedirs(fpath_dupes, exist_ok=True)
+    os.makedirs(fpath_no_changes, exist_ok=True)
+    # Opens the ps4 remote play program
+    print('Opening remote play, one moment please...')
+    subprocess.Popen('C:/Users/NAME/PS4ConsoleScraper/RemotePlay/'
+                     'RemotePlay.exe')
+    time.sleep(10)
+    set_fg()
+    press('tab')
+    press('enter')
+    print('Waiting 90 seconds for PS4 to turn on...')
+    time.sleep(30)
+    # print('60 more seconds...')
+    # time.sleep(30)
+    # print('30 more seconds...')
+    # time.sleep(30)
+    set_fg()
+    pyautogui.hotkey('alt', 'enter')
+
+
+def cap_wn():
+    location = 'WHATS NEW'
     print(f'Navigating to {location} location')
-    for i in range(5):
+    # goes through each promotion in the location
+    # and takes a screenshot
+    # put in a couple redundant moves to be safe
+    # this location can have varying promo numbers
+    for i in range(10):
+        fast_press('down')
+        ss(location)
+
+
+def cap_store():
+    location = 'STORE'
+    recal = 1
+    print(f'Navigating to {location} location')
+    press('esc')
+    time.sleep(1)
+    press('left')
+    # toggles back and forth variable number of times to grab all promos
+    for i in range(mp):
+        print(f'Pass {i+1} of {mp}')
+        time.sleep(2)
+        for i in range(3):
+            fast_press('down')
+        ss(location)
+        press('esc')
+        press('right')
+        time.sleep(1)
+        press('left')
+        recal += 1
+        if recal > 10:
+            recal = 1
+            recalibrate(location)
+
+
+def cap_feat_wh():
+    recal = 1
+    location = 'FEATURED'
+    print(f'Navigating to {location} location')
+    press('enter')
+    time.sleep(8)
+    print(f'Executing multi-promo placement rotation')
+    # toggles back and forth variable number of times to grab all promos
+    for i in range(mp):
+        print(f'Pass {i+1} of {mp}')
+        fast_press('right')
         fast_press('up')
-    press('down')
-    press('down')
-    time.sleep(2)
+        ss(location)
+        fast_press('down')
+        press('left')
+        location = 'WHATS HOT'
+        print(f'Navigating to {location} location')
+        for i in range(5):
+            fast_press('up')
+        press('down')
+        press('down')
+        time.sleep(2)
+        press('right')
+        ss(f'{location} one')
+        for i in range(6):
+            press('right')
+        fast_press('right')
+        press('up')
+        ss(f'{location} big')
+        fast_press('down')
+        press('left')
+        press('esc')
+        location = 'FEATURED'
+        print(f'Navigating back to {location} location')
+        time.sleep(1)
+        press('up')
+        time.sleep(2)
+        recal += 1
+        if recal > 10:
+            recal = 1
+            recalibrate(location)
+
+
+def cap_wh():
+    location = 'WHATS HOT'
+    n = 2
+    nav_top(n, location)
+    print(f'Executing main {location} rotation')
     press('right')
     ss(f'{location} one')
-    for i in range(10):
+    for i in range(3):
+        press('right')
+    ss(f'{location} po')
+    for i in range(3):
         press('right')
     fast_press('right')
-    fast_press('up')
+    press('up')
     ss(f'{location} big')
     fast_press('down')
-    press('left')
+    press('right')
+    ss(f'{location} ng')
+    for i in range(4):
+        press('right')
+    ss(f'{location} nao')
+    press('right')
+    press('right')
+    ss(f'{location} gd')
+    for i in range(4):
+        press('right')
+    ss(f'{location} nvr')
     press('esc')
-    location = 'FEATURED'
-    print(f'Navigating back to {location} location')
-    time.sleep(1)
-    press('up')
-    time.sleep(2)
-    recal += 1
-    if recal > 10:
-        recal = 1
-        recalibrate()
-    else:
-        pass
 
-# WHATS HOT
-location = 'WHATS HOT'
-n = 2
-nav_top(n)
-print(f'Executing main {location} rotation')
-press('right')
-ss(f'{location} one')
-for i in range(3):
-    press('right')
-ss(f'{location} ng')
-for i in range(4):
-    press('right')
-ss(f'{location} po')
-for i in range(3):
-    press('right')
-fast_press('right')
-press('up')
-ss(f'{location} big')
-fast_press('down')
-press('right')
-ss(f'{location} nao')
-press('right')
-press('right')
-ss(f'{location} gd')
-for i in range(4):
-    press('right')
-ss(f'{location} nvr')
-press('esc')
 
-# DEALS
-location = 'DEALS'
-n = 3
-nav_top(n)
-press('right')
-ss(f'{location} one')
-for i in range(4):
+def cap_deals():
+    location = 'DEALS'
+    n = 3
+    nav_top(n, location)
     press('right')
-ss(f'{location} gd')
-for i in range(3):
-    press('right')
-ss(f'{location} ppd')
-press('esc')
+    ss(f'{location} one')
+    for i in range(4):
+        press('right')
+    ss(f'{location} gd')
+    for i in range(3):
+        press('right')
+    ss(f'{location} ppd')
+    press('esc')
 
-# POPULAR
-location = 'POPULAR'
-n = 4
-nav_top(n)
-press('right')
-ss(f'{location} one')
-for i in range(4):
-    press('right')
-ss(f'{location} ts')
-for i in range(3):
-    press('right')
-ss(f'{location} mpg')
-for i in range(3):
-    press('right')
-ss(f'{location} tao')
-press('esc')
 
-# FEATURE NAMED
-location = 'FEATURE NAMED'
-n = 6
-nav_top(n)
-# put in a couple redundant moves to be safe
-# since this location can have varying promo numbers
-for i in range(4):
-    location = f'FEATURE NAMED {i+1}'
-    fast_press('right')
-    fast_press('up')
-    press('up')
-    ss(location)
-    press('down')
-    press('down')
-    # tries to go to the right, in case the promo has
-    # multiple pages
-    for i in range(7):
+def cap_pop():
+    location = 'POPULAR'
+    n = 4
+    nav_top(n, location)
+    press('right')
+    ss(f'{location} one')
+    for i in range(4):
+        press('right')
+    ss(f'{location} ts')
+    for i in range(3):
+        press('right')
+    ss(f'{location} mpg')
+    for i in range(3):
+        press('right')
+    ss(f'{location} tao')
+    press('esc')
+
+
+def cap_branded():
+    location = 'BRANDED'
+    n = 6
+    nav_top(n, location)
+    # put in a couple redundant moves to be safe
+    # since this location can have varying promo numbers
+    for i in range(4):
+        location = f'BRANDED {i+1}'
         fast_press('right')
+        fast_press('up')
+        press('up')
         ss(location)
-    press('esc')
-    press('left')
-    press('down')
-    time.sleep(2)
+        press('down')
+        press('down')
+        # tries to go to the right, in case the promo has
+        # multiple pages
+        for i in range(7):
+            fast_press('right')
+            ss(location)
+        press('esc')
+        press('left')
+        press('down')
+        time.sleep(2)
 
-# FREE
-location = 'FREE'
-n = 9
-recal = 1
-nav_bottom(n)
-print(f'Executing multi-promo placement rotation')
-for i in range(mp):
-    print(f'Pass {i+1} of {mp}')
-    press('right')
-    press('right')
-    ss(location)
-    press('left')
-    press('left')
-    slow_press('up')
-    slow_press('down')
-    recal += 1
-    if recal > 10:
-        recal = 1
-        recalibrate()
-    else:
-        pass
 
-# ADD-ONS
-location = 'ADDONS'
-n = 12
-recal = 1
-nav_bottom(n)
-print(f'Executing multi-promo placement rotation')
-for i in range(mp):
-    print(f'Pass {i+1} of {mp}')
-    press('right')
-    press('right')
-    ss(location)
-    press('left')
-    press('left')
-    slow_press('up')
-    slow_press('down')
-    recal += 1
-    if recal > 10:
-        recal = 1
-        recalibrate()
-    else:
-        pass
+def cap_free():
+    location = 'FREE'
+    n = 9
+    recal = 1
+    nav_bottom(n, location)
+    print(f'Executing multi-promo placement rotation')
+    for i in range(mp):
+        print(f'Pass {i+1} of {mp}')
+        press('right')
+        press('right')
+        ss(location)
+        press('left')
+        press('left')
+        slow_press('up')
+        slow_press('down')
+        recal += 1
+        if recal > 10:
+            recal = 1
+            recalibrate(location)
 
-# PS VR / PS PLUS
-location = 'PSVR'
-n = 14
-recal = 1
-nav_bottom(n)
-print(f'Executing multi-promo placement rotation')
-for i in range(mp):
-    print(f'Pass {i+1} of {mp}')
-    press('right')
-    press('right')
-    ss(location)
-    press('left')
-    press('left')
-    location = 'PSPLUS'
-    print(f'Navigating to {location} location.')
-    slow_press('up')
-    ss(location)
+
+def cap_addons():
+    location = 'ADDONS'
+    n = 12
+    recal = 1
+    nav_bottom(n, location)
+    print(f'Executing multi-promo placement rotation')
+    for i in range(mp):
+        print(f'Pass {i+1} of {mp}')
+        press('right')
+        press('right')
+        ss(location)
+        press('left')
+        press('left')
+        slow_press('up')
+        slow_press('down')
+        recal += 1
+        if recal > 10:
+            recal = 1
+            recalibrate(location)
+
+
+def cap_vr_plus():
     location = 'PSVR'
-    print(f'Navigating back to {location} location.')
-    slow_press('down')
-    recal += 1
-    if recal > 10:
-        recal = 1
-        recalibrate()
-    else:
-        pass
+    n = 14
+    recal = 1
+    nav_bottom(n, location)
+    print(f'Executing multi-promo placement rotation')
+    for i in range(mp):
+        print(f'Pass {i+1} of {mp}')
+        press('right')
+        press('right')
+        ss(location)
+        press('left')
+        press('left')
+        location = 'PSPLUS'
+        print(f'Navigating to {location} location.')
+        slow_press('up')
+        ss(location)
+        location = 'PSVR'
+        print(f'Navigating back to {location} location.')
+        slow_press('down')
+        recal += 1
+        if recal > 10:
+            recal = 1
+            recalibrate(location)
 
-# GAMES
-location = 'GAMES'
-n = 13
-recal = 1
-nav_bottom(n)
-press('right')
-# toggles back and forth variable number of times to grab all promos
-print(f'Executing multi-promo placement rotation')
-for i in range(mp):
-    print(f'Pass {i+1} of {mp}')
+
+def cap_games_rot():
+    location = 'GAMES'
+    n = 13
+    recal = 1
+    nav_bottom(n, location)
+    press('right')
+    for i in range(mp):
+        print(f'Pass {i+1} of {mp}')
+        press('right')
+        ss(f'{location} eg')
+        for i in range(9):
+            press('right')
+        fast_press('right')
+        press('up')
+        ss(f'{location} big')
+        fast_press('down')
+        press('left')
+        press('esc')
+        press('down')
+        time.sleep(2)
+        fast_press('right')
+        press('up')
+        ss(f'{location} ft')
+        fast_press('down')
+        press('left')
+        press('up')
+        time.sleep(2)
+        recal += 1
+        if recal > 10:
+            recal = 1
+            recalibrate(location)
+            press('right')
+    press('left')
+    press('left')
+
+
+def cap_games_main():
+    location = 'GAMES'
+    n = 13
+    nav_bottom(n, location)
+    press('right')
     press('right')
     ss(f'{location} eg')
-    for i in range(9):
+    for i in range(3):
+        press('right')
+    ss(f'{location} mp')
+    for i in range(4):
+        press('right')
+    ss(f'{location} oop')
+    for i in range(2):
         press('right')
     fast_press('right')
     press('up')
     ss(f'{location} big')
     fast_press('down')
-    press('left')
-    press('esc')
-    press('down')
-    time.sleep(2)
-    fast_press('right')
-    press('up')
-    ss(f'{location} ft')
-    fast_press('down')
-    press('left')
-    press('up')
-    time.sleep(2)
-    recal += 1
-    if recal > 10:
-        recal = 1
-        recalibrate()
+    press('right')
+    ss(f'{location} dg')
+    for i in range(4):
         press('right')
-    else:
-        pass
-# main rotation
-print(f'Executing main {location} rotation')
-press('right')
-ss(f'{location} eg')
-for i in range(3):
+    ss(f'{location} npp')
     press('right')
-ss(f'{location} mp')
-for i in range(4):
     press('right')
-ss(f'{location} oop')
-for i in range(2):
-    press('right')
-fast_press('right')
-press('up')
-ss(f'{location} big')
-fast_press('down')
-press('right')
-ss(f'{location} dg')
-for i in range(4):
-    press('right')
-ss(f'{location} npp')
-press('right')
-press('right')
-ss(f'{location} vrg')
-for i in range(4):
-    press('right')
-ss(f'{location} bs')
-for i in range(4):
-    press('right')
-ss(f'{location} npn')
-press('esc')
-press('left')
-
-
-# restarts the ps4 and closes out the remote play app.
-# restart is to ensure What's New location doesn't get wonky,
-# and then the PS4 will eventually go into rest mode after a
-# period of inactivity
-print('Restarting the PS4')
-for i in range(5):
+    ss(f'{location} vrg')
+    for i in range(4):
+        press('right')
+    ss(f'{location} bs')
+    for i in range(4):
+        press('right')
+    ss(f'{location} npn')
     press('esc')
-time.sleep(5)
-press('up')
-for i in range(15):
-    press('right')
-press('enter')
-press('down')
-press('enter')
-press('down')
-press('down')
-press('enter')
-time.sleep(2)
-print('Closing PS4 Remote Play App...')
-pyautogui.hotkey('alt', 'f4')
-time.sleep(2)
+    press('left')
 
-# removes duplicate images from specified locations
-# (there are a lot of them)
-print('Removing dupes from ADDONS')
-dupe_remover('ADDONS')
-print('Removing dupes from FEATURE NAMED')
-dupe_remover('FEATURE NAMED')
-print('Removing dupes from FEATURED')
-dupe_remover('FEATURED')
-print('Removing dupes from FREE')
-dupe_remover('FREE')
-print('Removing dupes from GAMES big')
-dupe_remover('GAMES big')
-print('Removing dupes from GAMES eg')
-dupe_remover('GAMES eg')
-print('Removing dupes from GAMES ft')
-dupe_remover('GAMES ft')
-print('Removing dupes from PSPLUS')
-dupe_remover('PSPLUS')
-print('Removing dupes from PSVR')
-dupe_remover('PSVR')
-print('Removing dupes from STORE')
-dupe_remover('STORE')
-print('Removing dupes from WHATS HOT big')
-dupe_remover('WHATS HOT big')
-print('Removing dupes from WHATS HOT one')
-dupe_remover('WHATS HOT one')
-print('Removing dupes from WHATS NEW')
-dupe_remover('WHATS NEW')
 
-# All done!
-print('All done')
+def restart():
+    print('Restarting the PS4')
+    for i in range(5):
+        press('esc')
+    time.sleep(5)
+    press('up')
+    for i in range(15):
+        press('right')
+    press('enter')
+    press('down')
+    press('enter')
+    press('down')
+    press('down')
+    press('enter')
+    time.sleep(2)
+    print('Closing PS4 Remote Play App...')
+    pyautogui.hotkey('alt', 'f4')
+    time.sleep(2)
+
+
+# Runs the full scraper (done once a day)
+def capture_full():
+    print('RUNNING FULL SCRAPE')
+    setup()
+    cap_wn()
+    cap_store()
+    cap_feat_wh()
+    cap_wh()
+    cap_deals()
+    cap_pop()
+    cap_branded()
+    cap_free()
+    cap_addons()
+    cap_vr_plus()
+    cap_games_rot()
+    cap_games_main()
+    restart()
+    for location in dynamic_locations:
+        print(f'Removing dupes from {location}.')
+        dupe_remover(location)
+    shutil.rmtree(fpath_dupes)
+    for location in static_locations:
+        new_image_check(location)
+
+
+# Runs through the rotational locations only (done twice a day)
+def capture_rotations():
+    print('RUNNING ROTATIONAL SCRAPE')
+    setup()
+    cap_store()
+    cap_feat_wh()
+    cap_free()
+    cap_addons()
+    cap_vr_plus()
+    cap_games_rot()
+    restart()
+    for location in dynamic_locations:
+        print(f'Removing dupes from {location}.')
+        dupe_remover(location)
+    shutil.rmtree(fpath_dupes)
+
+
+# Take in arguments to run through full scrape or rotational-only scrape
+# and execute
+parser = argparse.ArgumentParser()
+subparsers = parser.add_subparsers()
+parser_full = subparsers.add_parser('full', help='Runs the full scrape.')
+parser_full.set_defaults(func=capture_full)
+parser_rotation = subparsers.add_parser('rotation',
+                                        help='Runs only through the rotating'
+                                        'locations.')
+parser_rotation.set_defaults(func=capture_rotations)
+parse_it = parser.parse_args()
+parse_it.func()
