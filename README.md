@@ -15,7 +15,7 @@ $ pip install -r requirements.txt
 ### Walmart Scraper
 - Takes screenshots of videogame advertisements on main page, videogames page, and console (xb1, ps4, switch) pages of walmart.com
 - Saves image file with naming convention
-- Checks saved files against a reference directory to only keep new ads, and also create a CSV for ads which are no longer present.
+- Checks saved files against a reference directory (comparing filepaths) to only keep new ads, and also create a CSV for ads which are no longer present.
 
 ### PS4 Scraper
 - Connects to a PS4 via the Remote Play app.
