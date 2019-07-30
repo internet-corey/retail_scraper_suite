@@ -1,0 +1,9 @@
+opencv_python==4.1.0.25
+pywinauto==0.6.6
+scikit_image==0.15.0
+numpy==1.16.4
+PyAutoGUI==0.9.44
+pandas==0.24.2
+selenium==3.141.0
+Pillow==6.1.0
+skimage==0.0
