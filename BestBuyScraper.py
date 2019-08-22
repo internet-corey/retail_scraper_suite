@@ -188,10 +188,8 @@ ended_list = []
 # Creates directories for the day.
 timestamp = (time.strftime('%m-%d-%y', time.localtime()))
 timestamp_folder = (time.strftime('%m-%d-%y--%I-%M %p', time.localtime()))
-wk_dir = (f'//cammy.eedar.com/vol1/Retail Research/Z Automation Results/'
-          f'BestBuyScraper/BestBuyScraper {timestamp_folder}')
-ref_dir = (f'//cammy.eedar.com/vol1/Retail Research/Z Automation Results/'
-           f'BestBuyScraper/BestBuyReferenceDirectory')
+wk_dir = (f'path/to/dir/BestBuyScraper/BestBuyScraper {timestamp_folder}')
+ref_dir = (f'path/to/dir/BestBuyScraper/BestBuyReferenceDirectory')
 fpath_images = wk_dir + '/*.png'
 fpath_ref_images = ref_dir + '/*.png'
 fpath_active = wk_dir + '/active'
