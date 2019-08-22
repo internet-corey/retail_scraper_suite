@@ -30,3 +30,8 @@ $ pip install -r requirements.txt
 - Takes screenshots of videogame advertisements on main page, videogames page, and console (xb1, ps4, switch) pages of bestbuy.com
 - Saves image file with metadata generated from selenium-pulled web elements
 - Checks saved files against a reference directory to only keep new ads. Does filename comparisons and also SSIM comparisons for carousel images. Creates a CSV for ads which are no longer present.
+
+### Gmail Scraper
+- Connects to gmail account with imaplib
+- Pulls metadata such as thread ID sender, date, subject line, from imap.
+- Uses thread ID and selenium to go directly to email's webpage and takes a screenshot. 
