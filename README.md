@@ -33,5 +33,5 @@ $ pip install -r requirements.txt
 
 ### Gmail Scraper
 - Connects to gmail account with imaplib
-- Pulls metadata such as thread ID sender, date, subject line, from imap.
+- Pulls metadata such as thread ID sender, date, subject line, from imap. Saves metadata to CSV.
 - Uses thread ID and selenium to go directly to email's webpage and takes a screenshot. 
