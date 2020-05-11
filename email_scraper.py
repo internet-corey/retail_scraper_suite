@@ -1,40 +1,44 @@
 # stdlib
 import time
 import os
+import string
 import json
 import base64
-import string
-import glob
 import imaplib
 import email
 
 # 3rd party
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
-import pandas as pd
-import pyautogui
+from pandas import DataFrame
+import emoji
 
 
 def start_chromedriver():
     options = webdriver.ChromeOptions()
-    driver = webdriver.Chrome("chromedriver.exe", options=options)
+    driver = webdriver.Chrome(
+        "/example/driver/filepath/",
+        options=options
+    )
     driver.set_page_load_timeout(60)
     driver.maximize_window()
     driver.implicitly_wait(3)
     return driver
 
 
-def filter_chars(value):
-    '''filters out chars that break files'''
-    string_value = (str(value).replace('\n', '').replace('/', '')
-                    .replace("\"", '').replace('?', '').replace('%', '')
-                    .replace('*', '').replace(':', '').replace('|', '')
-                    .replace('"', '').replace('<', '').replace('>', '')
-                    .replace('.', '').replace('!', ''))
-    return ''.join(list(filter(lambda x: x in string.printable, string_value)))
+def unshadow(element):
+    '''expands a page's shadow-root
+    '''
+    shadow_root = driver.execute_script(
+        'return arguments[0].shadowRoot',
+        element
+    )
+    return shadow_root
 
 
 def fp_screenshot(driver: webdriver.Chrome):
+    '''Gets a full-page screenshot. Copied from blog.arkfeng.xyz
+    '''
     def send(cmd, params):
         resource = (f'/session/{driver.session_id}/chromium/'
                     f'send_command_and_get_result')
@@ -66,26 +70,41 @@ def fp_screenshot(driver: webdriver.Chrome):
 
 
 def fp_ss(driver: webdriver.Chrome, image: str = "screenshot.png"):
+    ''' Takes full-page screenshot and saves to file path'''
     png = fp_screenshot(driver)
     with open(image, 'wb') as f:
         f.write(png)
 
 
+def filter_chars(value):
+    '''filters out chars that break files or break internal file naming
+    convention'''
+    string_value = (str(value).replace('/', '')
+                    .replace("\"", '').replace('?', '').replace('%', '')
+                    .replace('*', '').replace(':', '').replace('|', '')
+                    .replace('"', '').replace('<', '').replace('>', '')
+                    .replace('!', '').replace('\n', '')
+                    )
+    return ''.join(list(filter(lambda x: x in string.printable, string_value)))
+
+
+def remove_emoji(text):
+    return emoji.get_emoji_regexp().sub(u'', text)
+
+
 metadata = []
-timestamp = (time.strftime('%m-%d-%y', time.localtime()))
-wk_dir = (f'path/to/directory/EmailScraper/EmailScraper {timestamp}')
-fpath_images = f'{wk_dir}/*.png'
-login = str(input('enter your email: '))
+timestamp = time.strftime('%m-%d-%y', time.localtime())
+wd = f'example/filepath/email_scraper/email_scraper_{timestamp}'
+login = str(input('enter your gmail login: '))
+print(f'Scraping emails for {login}')
 pw = str(input('enter your password: '))
 smtp_port = 993
+url1 = (
+    'https://mail.google.com/mail/u/0?ik=99dd2cc95d&view=pt&search='
+    'all&permthid=thread-f%3A'
+)
 
-# click on an email, click gmail's "print" button (not the PC's) and then copy
-# the URL up to "thread-f%3A". the 1st half of the URL will be the same for all
-# emails on that particular account. the pulled thread ID from imap will
-# combine to form the full direct-to-that-email URL
-url1 = ('https://mail.google.com/mail/example-url')
-
-os.makedirs(wk_dir, exist_ok=True)
+os.makedirs(wd, exist_ok=True)
 
 # connects to gmail account and creates a list of all unread emails
 mail = imaplib.IMAP4_SSL('imap.gmail.com')
@@ -93,11 +112,14 @@ mail.login(login, pw)
 mail.select('inbox')
 typ, data = mail.uid('search', None, '(UNSEEN)')
 mail_list = data[0].split()
+print(f'{len(mail_list)} unread emails.')
+i = 1
 
 driver = start_chromedriver()
 
 for thing in mail_list:
     meta = {}
+    print(f'Email {i} of {len(mail_list)}')
 
     # gets the thread ID to build a direct URL for chromedriver
     result, data = mail.uid('fetch', thing, '(X-GM-MSGID)')
@@ -113,20 +135,24 @@ for thing in mail_list:
     message = email.message_from_bytes(msg2)
 
     # keeps only the sender name, discarding the mail address
-    retailer = message['From'].split()[0].replace('"', '')
-    date = str(email.utils.parsedate_to_datetime(message['Date']))
-    subject = message['Subject']
-    promo_name = f'email {date} {retailer}'
-    meta['retailer'] = retailer
-    meta['subject'] = subject
-    meta['date'] = date
-    meta['url'] = url
-    meta['promo_name'] = promo_name
-    print(retailer)
-    print(subject)
-    print(date)
+    retailer, discard = message['From'].split(' <')
+    retailer = retailer.replace('"', '')
 
-    # goes to the email's URL
+    # removes various fluff words from retailer name
+    if 'GameStop' in retailer:
+        retailer = 'GameStop'
+    elif 'Best Buy' in retailer:
+        retailer = 'Best Buy'
+    elif 'Walmart' in retailer:
+        retailer = 'Walmart'
+
+    # transforms date to mm.dd.yy format, for client's filename requirement
+    date1 = str(email.utils.parsedate_to_datetime(message['Date']))[:10]
+    date2 = date1[5:].replace('-', '.')
+    year = date1[2:4]
+    date = date2 + '.' + year
+
+    # opens the email in chromedriver
     driver.get(url)
     time.sleep(4)
 
@@ -143,28 +169,94 @@ for thing in mail_list:
     except NoSuchElementException:
         pass
 
-    # escape to remove the printer overlay, then fullpage screenshots the email
-    pyautogui.press('esc')
-    time.sleep(2)
+    # switches to chrome://print/ window overlay
+    handles = driver.window_handles
+    original_handle = driver.current_window_handle
+    for handle in handles:
+        if handle == original_handle:
+            handles.remove(handle)
+    driver.switch_to.window(handles[0])
 
-    # checks if there are same-named files already in the dir (2+ email from
-    # one retailer in a single day)
-    for img in glob.glob(fpath_images):
-        if promo_name in fpath_images:
-            promo_name = filter_chars(f'{promo_name} {subject[:15]}')
+    # opens shadow roots and clicks the cancel button to close print overlay
+    root1 = driver.find_element_by_css_selector('print-preview-app')
+    shadow1 = unshadow(root1)
+    root2 = shadow1.find_element_by_css_selector('print-preview-sidebar')
+    shadow2 = unshadow(root2)
+    root3 = shadow2.find_element_by_css_selector('print-preview-button-strip')
+    shadow3 = unshadow(root3)
+    cancel_button = shadow3.find_element_by_css_selector('.cancel-button')
+    cancel_button.click()
 
-    file_name = f'{wk_dir}/{promo_name}.png'
-    fp_ss(driver=driver, image=f'{wk_dir}/{file_name}')
+    # switches back to main window
+    driver.switch_to.window(original_handle)
+
+    subject = (
+        driver.find_element_by_xpath('//div[@class="maincontent"]/table').text
+    )
+
+    # gets rid of unwanted fluff and emojis in subject
+    subject = (
+        subject.replace('\n1 message', '')
+        .replace('[External Public Use]', '')
+        .replace('FW: ', '')
+        .replace('SamOsburn', '(Name)')
+        .replace('Eedar', '(Name)')
+        .replace('eedar retail', '(Name)')
+        .replace('eedar', '(Name)')
+        .replace('\n', '')
+    )
+    subject = remove_emoji(subject)
+
+    # modifies sender / date / subject if forwarded email
+    if 'Corey' in retailer:
+        if 'PS4' in subject[:3]:
+            retailer = 'PlayStation'
+            date = subject[4:12]
+            subject = subject[13:]
+        elif 'GS' in subject[:3]:
+            retailer = 'GameStop'
+            date = subject[3:11]
+            subject = subject[12:]
+
+    # modified subject breaking off at the end of a word, for client's filename
+    # requirement
+    modded_subject = subject[:20]
+    split = modded_subject.rfind(' ')
+    modded_subject = modded_subject[:split] + '...'
+
+    # gets rid of characters that break file names
+    modded_subject = filter_chars(modded_subject)
+    promo_name = f'email - {date} - {retailer} - {modded_subject}'
+    print(promo_name)
+
+    meta['promo_name'] = promo_name
+    meta['retailer'] = retailer
+    meta['subject'] = subject
+    meta['date'] = date
+    meta['url'] = url
+    file_name = f'{wd}/{promo_name}.png'
+    time.sleep(1)
+
+    fp_ss(driver=driver, image=file_name)
     metadata.append(meta)
+    i += 1
 
 driver.close()
 
 # saves metadata to a CSV in the working directory
 if len(metadata) > 0:
-    df = pd.DataFrame(metadata, columns=['promo_name',
-                                         'retailer',
-                                         'date',
-                                         'subject',
-                                         'url'
-                                         ])
-    df.to_csv(f'{wk_dir}/metadata {timestamp}.csv', index=False)
+    df = DataFrame(
+        metadata,
+        columns=[
+            'retailer',
+            'date',
+            'subject',
+            'url'
+        ]
+    )
+    df.to_csv(
+        f'{wd}/metadata_{timestamp}.csv',
+        index=False,
+        encoding='utf-8-sig'
+    )
+    print('metadata saved to CSV.')
