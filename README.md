@@ -1,10 +1,6 @@
 # Scrapers for Videogame Retailers
 
 ## Installation
-PS4 Remote Play app needed for PS4 scraper.
-```
-https://remoteplay.dl.playstation.net/remoteplay/lang/en/index.html
-```
 Imports
 ```
 $ pip install -r requirements.txt
