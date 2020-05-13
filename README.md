@@ -8,6 +8,9 @@ $ pip install -r requirements.txt
 
 ## Overview
 
+These are not all of the scrapers I have built, but a few examples from each retailer type (website, email account, console storefront)
+PS4 now has its own repo because of enhancements that split it out into multiple .py files.
+
 ### Walmart Scraper
 - Takes screenshots of videogame advertisements on main page, videogames page, and console (xb1, ps4, switch) pages of walmart.com
 - Saves image file with metadata generated from selenium-pulled web elements
