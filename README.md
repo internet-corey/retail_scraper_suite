@@ -27,4 +27,9 @@ PS4 now has its own repo because of enhancements that split it out into multiple
 ### Gmail Scraper
 - Connects to gmail account with imaplib
 - Pulls metadata such as thread ID sender, date, subject line, from imap. Saves metadata to CSV.
-- Uses thread ID and selenium to go directly to email's webpage and takes a screenshot. 
+- Uses thread ID and selenium to go directly to email's webpage and takes a screenshot.
+
+### Steam Popup Scraper
+- Opens Steam PC client
+- Uses OpenCV template matching to find and click buttons based on saved template jpg's
+- Saves screenshots to argparsed directory
